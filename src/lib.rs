@@ -1,3 +1,7 @@
+mod utils;
+mod image;
+mod model;
+
 #[cfg(test)]
 mod tests {
     #[test]
