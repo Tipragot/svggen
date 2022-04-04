@@ -1,4 +1,5 @@
 mod utils;
+mod image;
 
 #[cfg(test)]
 mod tests {
