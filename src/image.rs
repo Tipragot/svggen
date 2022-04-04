@@ -15,3 +15,10 @@ impl FileLoad for Image {
         Ok(Self { content: content.into_boxed_slice() })
     }
 }
+
+impl Image {
+    /// Ecris l'image avec writer.
+    pub fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+        writer.write_all(&self.content)
+    }
+}
