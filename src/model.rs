@@ -14,7 +14,7 @@ pub enum ModelPart {
 /// Un modèle d'image.
 pub struct Model {
     /// Les parties qui composent le modèle.
-    pub parts: Vec<ModelPart>,
+    parts: Vec<ModelPart>,
 }
 
 impl FileLoad for Model {
@@ -58,5 +58,12 @@ impl FileLoad for Model {
         
         // On retourne le modèle
         Ok(Model { parts })
+    }
+}
+
+impl Model {
+    /// Retourne les parties du modèle.
+    pub fn parts(&self) -> &Vec<ModelPart> {
+        &self.parts
     }
 }
