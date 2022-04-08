@@ -139,6 +139,7 @@ impl Model {
 // ========================= //
 
 /// Crée une image à partir du modèle et des arguments fournis et l'écrit avec writer.
+/// Il est préférable d'utiliser cette fonction plutôt que `create` pour écrire dans un fichier.
 pub fn write<W: Write>(writer: &mut W, model: &Model, images: &HashMap<String, Image>, args: &[String]) -> io::Result<()> {
     for part in model.parts() {
         match part {
@@ -159,6 +160,7 @@ pub fn write<W: Write>(writer: &mut W, model: &Model, images: &HashMap<String, I
 }
 
 /// Crée une image à partir du modèle et des arguments fournis.
+/// Pour écrire directement dans un fichier, utilisez `write`.
 pub fn create(model: &Model, images: &HashMap<String, Image>, args: &[String]) -> io::Result<Image> {
     let mut buffer: Vec<u8> = Vec::with_capacity(1024);
     write(&mut buffer, model, images, args)?;
