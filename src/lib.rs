@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::{Write, Read, BufRead};
+use std::io::{Write, BufRead};
 use std::path::Path;
 use std::{io, fs};
 
@@ -10,7 +10,7 @@ use std::{io, fs};
 /// Permet de créer un objet à partir d'un fichier.
 pub trait FileLoad: Sized {
     /// Crée un objet à partir d'un fichier.
-    fn load(file: fs::File) -> io::Result<Self>;
+    fn load<P: AsRef<Path>>(path: P) -> io::Result<Self>;
 
     /// Récupère toutes les objets d'un dossier.
     fn load_folder<P: AsRef<Path>>(folder: P) -> HashMap<String, Self> {
@@ -30,12 +30,7 @@ pub trait FileLoad: Sized {
                     _ => continue,
                 };
 
-                let file = match fs::File::open(entry.path()) {
-                    Ok(file) => file,
-                    _ => continue,
-                };
-
-                match Self::load(file) {
+                match Self::load(entry.path()) {
                     Ok(obj) => objects.insert(name, obj),
                     _ => continue,
                 };
@@ -56,10 +51,8 @@ pub struct Image {
 }
 
 impl FileLoad for Image {
-    fn load(mut file: fs::File) -> io::Result<Self> {
-        let mut content = Vec::with_capacity(file.metadata()?.len() as usize);
-        file.read_to_end(&mut content)?;
-        Ok(Self { content: content.into_boxed_slice() })
+    fn load<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+        Ok(Self { content: fs::read(path)?.into_boxed_slice() })
     }
 }
 
@@ -90,7 +83,8 @@ pub struct Model {
 }
 
 impl FileLoad for Model {
-    fn load(file: fs::File) -> io::Result<Self>{
+    fn load<P: AsRef<Path>>(path: P) -> io::Result<Self>{
+        let file = fs::File::open(path)?;
         let mut buffer: Vec<u8> = Vec::with_capacity(file.metadata()?.len() as usize);
         let mut parts: Vec<ModelPart> = Vec::with_capacity(20);
 
@@ -141,11 +135,11 @@ impl Model {
 }
 
 // ========================= //
-// ======== GENERATE ======= //
+// ========== MAIN ========= //
 // ========================= //
 
-/// Génère une image à partir d'un modèle et des arguments fournis et l'écris avec writer.
-pub fn generate<W: Write>(writer: &mut W, model: &Model, images: &HashMap<String, Image>, args: &[String]) -> io::Result<()> {
+/// Crée une image à partir du modèle et des arguments fournis et l'écrit avec writer.
+pub fn write<W: Write>(writer: &mut W, model: &Model, images: &HashMap<String, Image>, args: &[String]) -> io::Result<()> {
     for part in model.parts() {
         match part {
             ModelPart::Text(text) => writer.write_all(text)?,
@@ -162,4 +156,11 @@ pub fn generate<W: Write>(writer: &mut W, model: &Model, images: &HashMap<String
         }
     }
     Ok(())
+}
+
+/// Crée une image à partir du modèle et des arguments fournis.
+pub fn create(model: &Model, images: &HashMap<String, Image>, args: &[String]) -> io::Result<Image> {
+    let mut buffer: Vec<u8> = Vec::with_capacity(1024);
+    write(&mut buffer, model, images, args)?;
+    Ok(Image { content: buffer.into_boxed_slice() })
 }
