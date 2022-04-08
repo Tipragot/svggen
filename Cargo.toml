@@ -1,6 +1,12 @@
 [package]
 name = "svgen"
 version = "0.1.0"
+description = "Permets de créer des images vectorielles à partir de modèles."
+authors = ["Tipragot <tipragot@gmail.com>"]
+license = "Apache-2.0"
 edition = "2021"
+keywords = ["graphics", "image", "svg", "generator"]
+categories = ["graphics"]
+repository = "https://github.com/Tipragot/svgen"
 
 [dependencies]
