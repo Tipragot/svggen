@@ -57,9 +57,9 @@ impl FileLoad for Image {
 }
 
 impl Image {
-    /// Ecris l'image avec writer.
-    pub fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
-        writer.write_all(&self.content)
+    /// Retourne le contenu de l'image.
+    pub fn content(&self) -> &[u8] {
+        &self.content
     }
 }
 
@@ -146,7 +146,7 @@ pub fn write<W: Write>(writer: &mut W, model: &Model, images: &HashMap<String, I
             ModelPart::Text(text) => writer.write_all(text)?,
             ModelPart::Argument(index) => match args.get(*index) {
                 Some(arg) => match images.get(arg) {
-                    Some(image) => image.write(writer)?,
+                    Some(image) => writer.write_all(&image.content)?,
                     _ => writer.write_all(arg.as_bytes())?,
                 },
                 _ => return Err(io::Error::new(
