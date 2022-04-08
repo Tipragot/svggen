@@ -1,4 +1,4 @@
-# Svgen
+# SvgGen
 Un sytème de génération d'image qui permets de créer des images vectorielles à partir de modèles.
 
 ## Modèle
@@ -18,7 +18,7 @@ Dans un modèle, chaque lignes qui correpondent à `#GET n` sera remplacé par l
 
 ## Utilisation
 ```rust
-use svgen::{self, Image, Model, FileLoad};
+use svggen::{self, Image, Model, FileLoad};
 use std::fs;
 
 fn main() {
@@ -31,14 +31,14 @@ fn main() {
 
     // Création d'une image
     let args = ["Hello".to_string(), "World".to_string()];
-    let result = svgen::create(&model, &images, &args)
+    let result = svggen::create(&model, &images, &args)
         .expect("Erreur lors de la création de l'image");
     println!("Image généré: {:?}", result.content());
     
     // Ecriture d'une image dans un fichier
     let mut file = fs::File::create("output.svg")
         .expect("Impossible de créer le fichier");
-    svgen::write(&mut file, &model, &images, &args)
+    svggen::write(&mut file, &model, &images, &args)
         .expect("Erreur lors de l'écriture de l'image");
 }
 ```
