@@ -7,12 +7,12 @@ use std::{io, fs};
 // ========= UTILS ========= //
 // ========================= //
 
-/// Permet de créer un objet à partir d'un fichier.
+/// Un objet pouvant être créer à partir d'un fichier.
 pub trait FileLoad: Sized {
     /// Crée un objet à partir d'un fichier.
     fn load<P: AsRef<Path>>(path: P) -> io::Result<Self>;
 
-    /// Récupère toutes les objets d'un dossier.
+    /// Récupère tous les objets d'un dossier.
     fn load_folder<P: AsRef<Path>>(folder: P) -> HashMap<String, Self> {
         let mut objects = HashMap::new();
         if let Ok(directory) = fs::read_dir(folder) {
@@ -138,8 +138,7 @@ impl Model {
 // ========== MAIN ========= //
 // ========================= //
 
-/// Crée une image à partir du modèle et des arguments fournis et l'écrit avec writer.
-/// Il est préférable d'utiliser cette fonction plutôt que `create` pour écrire dans un fichier.
+/// Ecris une image à partir du modèle et des arguments fournis.
 pub fn write<W: Write>(writer: &mut W, model: &Model, images: &HashMap<String, Image>, args: &[String]) -> io::Result<()> {
     for part in model.parts() {
         match part {
@@ -160,7 +159,6 @@ pub fn write<W: Write>(writer: &mut W, model: &Model, images: &HashMap<String, I
 }
 
 /// Crée une image à partir du modèle et des arguments fournis.
-/// Pour écrire directement dans un fichier, utilisez `write`.
 pub fn create(model: &Model, images: &HashMap<String, Image>, args: &[String]) -> io::Result<Image> {
     let mut buffer: Vec<u8> = Vec::with_capacity(1024);
     write(&mut buffer, model, images, args)?;
