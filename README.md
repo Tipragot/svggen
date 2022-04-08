@@ -1,4 +1,4 @@
-# Svg Model
+# Svgen
 Un sytème de génération d'image qui permets de créer des images vectorielles à partir de modèles.
 
 ## Modèle
