@@ -7,12 +7,12 @@ use std::{io, fs};
 // ========= UTILS ========= //
 // ========================= //
 
-/// Un objet pouvant être créer à partir d'un fichier.
+/// An object that can be created from a file.
 pub trait FileLoad: Sized {
-    /// Crée un objet à partir d'un fichier.
+    /// Creates an object from a file.
     fn load<P: AsRef<Path>>(path: P) -> io::Result<Self>;
 
-    /// Récupère tous les objets d'un dossier.
+    /// Get all objects from a directory (one object per file).
     fn load_folder<P: AsRef<Path>>(folder: P) -> HashMap<String, Self> {
         let mut objects = HashMap::new();
         if let Ok(directory) = fs::read_dir(folder) {
@@ -44,20 +44,21 @@ pub trait FileLoad: Sized {
 // ========= IMAGE ========= //
 // ========================= //
 
-/// Une image au format svg.
+/// An image (in svg format).
 pub struct Image {
-    /// Le contenu de l'image.
+    /// The content of the image.
     content: Box<[u8]>,
 }
 
 impl FileLoad for Image {
+    /// Creates an image from a file.
     fn load<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         Ok(Self { content: fs::read(path)?.into_boxed_slice() })
     }
 }
 
 impl Image {
-    /// Retourne le contenu de l'image.
+    /// Returns the content of the image.
     pub fn content(&self) -> &[u8] {
         &self.content
     }
@@ -67,37 +68,38 @@ impl Image {
 // ========= MODEL ========= //
 // ========================= //
 
-/// Une partie d'un modèle.
+/// A part of a model.
 pub enum ModelPart {
-    /// Du texte.
+    /// Some text.
     Text(Box<[u8]>),
 
-    /// Une référence à un argument.
+    /// A reference to an argument (an image or some text).
     Argument(usize),
 }
 
-/// Un modèle d'image.
+/// An image model.
 pub struct Model {
-    /// Les parties qui composent le modèle.
+    /// The parts of the model.
     parts: Vec<ModelPart>,
 }
 
 impl FileLoad for Model {
+    /// Creates a model from a file.
     fn load<P: AsRef<Path>>(path: P) -> io::Result<Self>{
         let file = fs::File::open(path)?;
         let mut buffer: Vec<u8> = Vec::with_capacity(file.metadata()?.len() as usize);
         let mut parts: Vec<ModelPart> = Vec::with_capacity(20);
 
-        // On lit le fichier ligne par lignes
+        // For each line
         let lines = io::BufReader::new(file).lines();
         for line in lines {
             let line = line?;
             let trim_line = line.trim();
 
-            // On teste si la ligne est une référence à un argument
+            // If the line is an argument reference
             if trim_line.starts_with("#GET ") {
                 if let Ok(index) = trim_line[5..].parse::<usize>() {
-                    // On ajoute le texte du buffer (si il y en a)
+                    // Add the text buffer to the parts (if it's not empty)
                     if buffer.len() > 0 {
                         buffer.push(b'\n');
                         parts.push(ModelPart::Text(buffer.clone().into_boxed_slice()));
@@ -105,30 +107,29 @@ impl FileLoad for Model {
                         buffer.push(b' ');
                     }
 
-                    // On ajoute la référence à un argument
+                    // Add the argument reference to the parts
                     parts.push(ModelPart::Argument(index));
                     continue;
                 }
             }
 
-            // Sinon on ajoute la ligne au buffer
+            // Else add the line to the text buffer
             if buffer.len() > 0 { buffer.push(b'\n'); }
             buffer.append(&mut line.into_bytes());
         }
 
-        // On ajoute le texte restant (si il y en a)
+        // Add the text buffer to the parts (if it's not empty)
         if buffer.len() > 0 {
-            buffer.push(b'\n');
             parts.push(ModelPart::Text(buffer.clone().into_boxed_slice()));
         }
         
-        // On retourne le modèle
+        // Return the model
         Ok(Model { parts })
     }
 }
 
 impl Model {
-    /// Retourne les parties du modèle.
+    /// Returns the parts of the model.
     pub fn parts(&self) -> &Vec<ModelPart> {
         &self.parts
     }
@@ -138,7 +139,7 @@ impl Model {
 // ========== MAIN ========= //
 // ========================= //
 
-/// Ecris une image à partir du modèle et des arguments fournis.
+/// Write an image from a model and the arguments provided.
 pub fn write<W: Write>(writer: &mut W, model: &Model, images: &HashMap<String, Image>, args: &[String]) -> io::Result<()> {
     for part in model.parts() {
         match part {
@@ -150,7 +151,7 @@ pub fn write<W: Write>(writer: &mut W, model: &Model, images: &HashMap<String, I
                 },
                 _ => return Err(io::Error::new(
                     io::ErrorKind::NotFound,
-                    format!("Argument non fournis: {}", index)
+                    format!("Argument {} not found", index),
                 )),
             }
         }
@@ -158,7 +159,7 @@ pub fn write<W: Write>(writer: &mut W, model: &Model, images: &HashMap<String, I
     Ok(())
 }
 
-/// Crée une image à partir du modèle et des arguments fournis.
+/// Create an image from a model and the arguments provided.
 pub fn create(model: &Model, images: &HashMap<String, Image>, args: &[String]) -> io::Result<Image> {
     let mut buffer: Vec<u8> = Vec::with_capacity(1024);
     write(&mut buffer, model, images, args)?;
