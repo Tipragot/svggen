@@ -58,6 +58,11 @@ impl FileLoad for Image {
 }
 
 impl Image {
+    /// Create an image with the given content.
+    pub fn new(content: Box<[u8]>) -> Self {
+        Self { content }
+    }
+
     /// Returns the content of the image.
     pub fn content(&self) -> &[u8] {
         &self.content
@@ -129,6 +134,11 @@ impl FileLoad for Model {
 }
 
 impl Model {
+    /// Create a model from the given parts.
+    pub fn new(parts: Vec<ModelPart>) -> Self {
+        Self { parts }
+    }
+
     /// Returns the parts of the model.
     pub fn parts(&self) -> &Vec<ModelPart> {
         &self.parts
