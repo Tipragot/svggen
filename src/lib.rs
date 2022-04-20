@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::{Write, BufRead};
+use std::io::{Write, BufRead, Read};
 use std::path::Path;
 use std::{io, fs};
 
@@ -7,9 +7,20 @@ use std::{io, fs};
 // ========= UTILS ========= //
 // ========================= //
 
-/// An object that can be created from a file.
-pub trait FileLoad: Sized {
-    /// Creates an object from a file.
+/// An object that can be created from a reader.
+pub trait Loadable: Sized {
+    /// Creates an object with a reader.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `reader` - The reader to read from.
+    /// 
+    /// # Errors
+    /// 
+    /// This function will return an error if the object cannot be created with the reader.
+    fn load<R: Read>(reader: &mut R) -> io::Result<Self>;
+
+    /// Creates an object with a file path.
     /// 
     /// # Arguments
     /// 
@@ -17,8 +28,10 @@ pub trait FileLoad: Sized {
     /// 
     /// # Errors
     /// 
-    /// This function will return an error the object cannot be created from the file. 
-    fn load<P: AsRef<Path>>(path: P) -> io::Result<Self>;
+    /// This function will return an error if the object cannot be created with the file.
+    fn load_file<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+        Self::load(&mut fs::File::open(path)?)
+    }
 
     /// Get all objects from a directory (one object per file).
     /// 
@@ -47,8 +60,13 @@ pub trait FileLoad: Sized {
                     },
                     _ => continue,
                 };
+                
+                let mut file = match fs::File::open(entry.path()) {
+                    Ok(file) => file,
+                    _ => continue,
+                };
 
-                match Self::load(entry.path()) {
+                match Self::load(&mut file) {
                     Ok(obj) => objects.insert(name, obj),
                     _ => continue,
                 };
@@ -69,34 +87,31 @@ pub struct Image {
     content: Box<[u8]>,
 }
 
-impl FileLoad for Image {
-    /// Creates an image from a file.
+impl Loadable for Image {
+    /// Creates an image with a reader.
     /// 
     /// # Arguments
     /// 
-    /// * `path` - The path to the file.
+    /// * `reader` - The reader to read from.
     /// 
     /// # Errors
     /// 
-    /// This function will return an error if the file cannot be read.
+    /// This function will return an error if the reader cannot be read.
     /// 
     /// # Example
     /// 
-    /// image.svg:
-    /// ```svg
-    /// <svg></svg>
     /// ```
+    /// use svggen::{Image, Loadable};
     /// 
-    /// main.rs:
-    /// ```no_run
-    /// use svggen::{Image, FileLoad};
+    /// // &[u8] implements Read so we can use it as a reader.
+    /// let image = Image::load(&mut &b"<svg></svg>"[..]).unwrap();
     /// 
-    /// let image = Image::load("image.svg").unwrap();
-    ///     
     /// assert_eq!(image.content(), b"<svg></svg>");
     /// ```
-    fn load<P: AsRef<Path>>(path: P) -> io::Result<Self> {
-        Ok(Self { content: fs::read(path)?.into_boxed_slice() })
+    fn load<R: Read>(reader: &mut R) -> io::Result<Self> {
+        let mut content = Vec::with_capacity(1024);
+        reader.read_to_end(&mut content)?;
+        Ok(Image { content: content.into_boxed_slice() })
     }
 }
 
@@ -220,42 +235,40 @@ pub struct Model {
     parts: Vec<ModelPart>,
 }
 
-impl FileLoad for Model {
-    /// Creates a model from a file.
+impl Loadable for Model {
+    /// Creates a model with a reader.
+    /// 
+    /// Each line that matches `#GET n` will be the index argument `n`.
     /// 
     /// # Arguments
     /// 
-    /// * `path` - The path to the file.
+    /// * `reader` - The reader to read from.
     /// 
     /// # Errors
     /// 
-    /// This function will return an error if the file cannot be read.
+    /// This function will return an error if the reader cannot be read.
     /// 
     /// # Example
     /// 
-    /// model.svg:
-    /// ```svg
-    /// <svg width="100" height="100">
-    ///     <!-- The line will be replaced by the index argument `0` -->
-    ///     #GET 0
-    /// </svg>
     /// ```
+    /// use svggen::{Model, ModelPart, Loadable};
     /// 
-    /// main.rs:
-    /// ```no_run
-    /// use svggen::{Model, FileLoad};
+    /// // &[u8] implements Read so we can use it as a reader.
+    /// let model = Model::load(&mut &b"<svg>\n#GET 0\n</svg>"[..]).unwrap();
     /// 
-    /// let model = Model::load("model.svg").unwrap();
-    ///     
-    /// assert_eq!(model.parts().len(), 3);
+    /// assert_eq!(model.parts(), &[
+    ///     ModelPart::from("<svg>\n"),
+    ///     ModelPart::from(0),
+    ///     ModelPart::from("\n</svg>"),
+    /// ]);
     /// ```
-    fn load<P: AsRef<Path>>(path: P) -> io::Result<Self>{
-        let file = fs::File::open(path)?;
-        let mut buffer: Vec<u8> = Vec::with_capacity(file.metadata()?.len() as usize);
+    fn load<R: Read>(reader: &mut R) -> io::Result<Self> {
+        let mut buffer: Vec<u8> = Vec::with_capacity(1024);
         let mut parts: Vec<ModelPart> = Vec::with_capacity(20);
-
+        
         // For each line
-        let lines = io::BufReader::new(file).lines();
+        let lines = io::BufReader::new(reader).lines();
+        let mut first_line = true;
         for line in lines {
             let line = line?;
             let trim_line = line.trim();
@@ -268,7 +281,6 @@ impl FileLoad for Model {
                         buffer.push(b'\n');
                         parts.push(ModelPart::Text(buffer.clone().into_boxed_slice()));
                         buffer.clear();
-                        buffer.push(b' ');
                     }
 
                     // Add the argument reference to the parts
@@ -277,8 +289,14 @@ impl FileLoad for Model {
                 }
             }
 
-            // Else add the line to the text buffer
-            if buffer.len() > 0 { buffer.push(b'\n'); }
+            // Add new line if it's not the first line
+            if first_line {
+                first_line = false;
+            } else {
+                buffer.push(b'\n');
+            }
+
+            // Add the line to the text buffer
             buffer.append(&mut line.into_bytes());
         }
 
@@ -302,12 +320,12 @@ impl Model {
     /// # Example
     /// 
     /// ```
-    /// use svggen::Model;
+    /// use svggen::{Model, ModelPart};
     /// 
     /// let model = Model::new(vec![
-    ///     "Hello ".into(),
-    ///     0.into(),
-    ///     "!".into()
+    ///     ModelPart::from("Hello "),
+    ///     ModelPart::from(0),
+    ///     ModelPart::from("!")
     /// ]);
     /// ```
     pub fn new(parts: Vec<ModelPart>) -> Self {
@@ -319,12 +337,12 @@ impl Model {
     /// # Example
     /// 
     /// ```
-    /// use svggen::Model;
+    /// use svggen::{Model, ModelPart};
     /// 
     /// let model = Model::new(vec![
-    ///     "Hello ".into(),
-    ///     0.into(),
-    ///     "!".into()
+    ///     ModelPart::from("Hello "),
+    ///     ModelPart::from(0),
+    ///     ModelPart::from("!")
     /// ]);
     /// 
     /// assert_eq!(model.parts().len(), 3);
@@ -348,12 +366,12 @@ impl Model {
     /// # Example
     /// 
     /// ```
-    /// use svggen::{Model, Argument};
+    /// use svggen::{Model, ModelPart, Argument};
     /// 
     /// let model = Model::new(vec![
-    ///     "Hello ".into(),
-    ///     0.into(),
-    ///     "!".into()
+    ///     ModelPart::from("Hello "),
+    ///     ModelPart::from(0),
+    ///     ModelPart::from("!")
     /// ]);
     /// let arguments = vec![Argument::Text(b"World")];
     /// let mut buffer = Vec::with_capacity(12);
@@ -394,12 +412,12 @@ impl Model {
     /// # Example
     /// 
     /// ```
-    /// use svggen::{Model, Argument};
+    /// use svggen::{Model, ModelPart, Argument};
     /// 
     /// let model = Model::new(vec![
-    ///     "Hello ".into(),
-    ///     0.into(),
-    ///     "!".into()
+    ///     ModelPart::from("Hello "),
+    ///     ModelPart::from(0),
+    ///     ModelPart::from("!")
     /// ]);
     /// let arguments = vec![Argument::Text(b"World")];
     /// let image = model.create(&arguments).unwrap();
