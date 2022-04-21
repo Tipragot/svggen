@@ -226,6 +226,9 @@ pub enum Argument<'a> {
 
     /// An image.
     Image(&'a Image),
+
+    /// An empty argument.
+    None,
 }
 
 impl From<&str> for Argument<'_> {
@@ -408,6 +411,7 @@ impl Model {
                     Some(argument) => match argument {
                         Argument::Text(text) => writer.write_all(text)?,
                         Argument::Image(image) => writer.write_all(image.content())?,
+                        Argument::None => (),
                     },
                     _ => return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
@@ -454,6 +458,7 @@ impl Model {
                     Some(argument) => match argument {
                         Argument::Text(text) => buffer.write_all(text).unwrap(),
                         Argument::Image(image) => buffer.write_all(image.content()).unwrap(),
+                        Argument::None => (),
                     },
                     _ => return Err(*index),
                 },
