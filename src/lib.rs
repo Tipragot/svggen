@@ -222,10 +222,31 @@ impl From<usize> for ModelPart {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Argument<'a> {
     /// Some text.
-    Text(&'a [u8]),
+    Text(Box<[u8]>),
 
     /// An image.
     Image(&'a Image),
+}
+
+impl From<&str> for Argument<'_> {
+    /// Creates an `Argument::Text` from a string.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `text` - The text to create the `Argument::Text` from.
+    /// 
+    /// # Example
+    /// 
+    /// ```
+    /// use svggen::Argument;
+    /// 
+    /// let text = Argument::from("Hello world!");
+    /// 
+    /// assert_eq!(text, Argument::Text(b"Hello world!".to_vec().into()));
+    /// ```
+    fn from(s: &str) -> Self {
+        Argument::Text(s.as_bytes().into())
+    }
 }
 
 /// An image model.
@@ -373,7 +394,7 @@ impl Model {
     ///     ModelPart::from(0),
     ///     ModelPart::from("!")
     /// ]);
-    /// let arguments = vec![Argument::Text(b"World")];
+    /// let arguments = vec![Argument::from("World")];
     /// let mut buffer = Vec::with_capacity(12);
     /// model.write(&mut buffer, &arguments).unwrap();
     /// 
@@ -419,7 +440,7 @@ impl Model {
     ///     ModelPart::from(0),
     ///     ModelPart::from("!")
     /// ]);
-    /// let arguments = vec![Argument::Text(b"World")];
+    /// let arguments = vec![Argument::from("World")];
     /// let image = model.create(&arguments).unwrap();
     /// 
     /// assert_eq!(image.content(), b"Hello World!");
