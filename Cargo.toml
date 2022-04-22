@@ -1,6 +1,6 @@
 [package]
 name = "svggen"
-version = "1.0.0"
+version = "2.0.0"
 description = "Allows you to create vector images from templates."
 authors = ["Tipragot <tipragot@gmail.com>"]
 license = "Apache-2.0"
@@ -8,3 +8,6 @@ edition = "2021"
 keywords = ["graphics", "image", "svg", "generator"]
 categories = ["graphics"]
 repository = "https://github.com/Tipragot/svggen"
+
+[dependencies]
+rutil = "0.1.0"
