@@ -1,224 +1,121 @@
-use std::collections::HashMap;
-use std::io::{Write, BufRead, Read};
-use std::path::Path;
-use std::{io, fs};
-
-// ========================= //
-// ========= UTILS ========= //
-// ========================= //
-
-/// An object that can be created from a reader.
-pub trait Loadable: Sized {
-    /// Creates an object with a reader.
-    /// 
-    /// # Arguments
-    /// 
-    /// * `reader` - The reader to read from.
-    /// 
-    /// # Errors
-    /// 
-    /// This function will return an error if the object cannot be created with the reader.
-    fn load<R: Read>(reader: &mut R) -> io::Result<Self>;
-
-    /// Creates an object with a file path.
-    /// 
-    /// # Arguments
-    /// 
-    /// * `path` - The path to the file.
-    /// 
-    /// # Errors
-    /// 
-    /// This function will return an error if the object cannot be created with the file.
-    fn load_file<P: AsRef<Path>>(path: P) -> io::Result<Self> {
-        Self::load(&mut fs::File::open(path)?)
-    }
-
-    /// Get all objects from a directory (one object per file).
-    /// 
-    /// It will ignore files that cannot be loaded.
-    /// 
-    /// # Arguments
-    /// 
-    /// * `path` - The path to the directory.
-    /// 
-    /// # Returns
-    /// 
-    /// A map of the objects, with the file name as the key (without the extension).
-    fn load_folder<P: AsRef<Path>>(folder: P) -> HashMap<String, Self> {
-        let mut objects = HashMap::new();
-        if let Ok(directory) = fs::read_dir(folder) {
-            for entry in directory {
-                let entry = match entry {
-                    Ok(entry) => entry,
-                    _ => continue,
-                };
-
-                let name = match entry.file_name().to_str() {
-                    Some(name) => match name.rfind('.') {
-                        Some(index) => name[..index].to_owned(),
-                        _ => continue,
-                    },
-                    _ => continue,
-                };
-                
-                let mut file = match fs::File::open(entry.path()) {
-                    Ok(file) => file,
-                    _ => continue,
-                };
-
-                match Self::load(&mut file) {
-                    Ok(obj) => objects.insert(name, obj),
-                    _ => continue,
-                };
-            }
-        }
-        objects
-    }
-}
+use std::io::{self, BufRead};
+use rutil::read::*;
 
 // ========================= //
 // ========= IMAGE ========= //
 // ========================= //
 
-/// An image (in svg format).
+/// An image (in svg format)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Image {
     /// The content of the image.
     content: Box<[u8]>,
 }
 
-impl Loadable for Image {
-    /// Creates an image with a reader.
-    /// 
-    /// # Arguments
-    /// 
-    /// * `reader` - The reader to read from.
-    /// 
-    /// # Errors
-    /// 
-    /// This function will return an error if the reader cannot be read.
-    /// 
-    /// # Example
-    /// 
-    /// ```
-    /// use svggen::{Image, Loadable};
-    /// 
-    /// // &[u8] implements Read so we can use it as a reader.
-    /// let image = Image::load(&mut &b"<svg></svg>"[..]).unwrap();
-    /// 
-    /// assert_eq!(image.content(), b"<svg></svg>");
-    /// ```
-    fn load<R: Read>(reader: &mut R) -> io::Result<Self> {
-        let mut content = Vec::with_capacity(1024);
-        reader.read_to_end(&mut content)?;
-        Ok(Image { content: content.into_boxed_slice() })
-    }
-}
-
 impl Image {
-    /// Create an image with the given content.
-    /// 
-    /// # Arguments
-    /// 
-    /// * `content` - The content of the image.
-    pub fn new(content: Box<[u8]>) -> Self {
-        Self { content }
-    }
-
     /// Returns the content of the image.
     /// 
-    /// # Example
+    /// # Examples
     /// 
     /// ```
     /// use svggen::Image;
     /// 
-    /// let image = Image::from("<svg></svg>");
-    /// 
-    /// assert_eq!(image.content(), b"<svg></svg>");
+    /// let image = Image::from("Hello World!".as_bytes());
+    /// assert_eq!(image.content(), b"Hello World!");
     /// ```
     pub fn content(&self) -> &[u8] {
         &self.content
     }
 }
 
-impl From<&str> for Image {
-    /// Creates an image from a string.
+impl<T: Into<Box<[u8]>>> From<T> for Image {
+    /// Creates a new image from the given content.
     /// 
     /// # Arguments
     /// 
     /// * `content` - The content of the image.
     /// 
-    /// # Example
+    /// # Examples
     /// 
     /// ```
     /// use svggen::Image;
     /// 
-    /// let image = Image::from("<svg></svg>");
-    /// 
-    /// assert_eq!(image.content(), b"<svg></svg>");
+    /// let image = Image::from("Hello World!".as_bytes());
+    /// assert_eq!(image.content(), b"Hello World!");
     /// ```
-    fn from(content: &str) -> Self {
-        Self { content: content.as_bytes().into() }
+    fn from(content: T) -> Self {
+        Image { content: content.into() }
+    }
+}
+
+impl Readable for Image {
+    /// There is no parsing error. The content is not parsed.
+    type ParseError = ();
+
+    /// Creates a new image from a reader.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `reader` - The reader to read the image from.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use rutil::read::Readable;
+    /// use svggen::Image;
+    /// 
+    /// let mut data = "Hello World!".as_bytes();
+    /// 
+    /// // data implements `io::Read` so we can use it as a reader
+    /// let image = Image::load(&mut data).unwrap();
+    /// assert_eq!(image.content(), b"Hello World!");
+    /// ```
+    fn load<R: std::io::Read>(reader: &mut R) -> Result<Self, ReadError<Self::ParseError>> {
+        let mut content = Vec::new();
+        reader.read_to_end(&mut content)?;
+        Ok(Image { content: content.into() })
     }
 }
 
 // ========================= //
-// ========= MODEL ========= //
+// ======= MODEL PART ====== //
 // ========================= //
 
-/// A part of a model.
+/// A model part used to create a model.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ModelPart {
     /// Some text.
     Text(Box<[u8]>),
 
-    /// A reference to an argument (an image or some text).
+    /// An argument.
     Argument(usize),
 }
 
-impl From<&str> for ModelPart {
-    /// Creates a `ModelPart::Text` from a string.
+impl<T: Into<Box<[u8]>>> From<T> for ModelPart {
+    /// Creates a new text model part from the given content.
     /// 
     /// # Arguments
     /// 
-    /// * `text` - The text to create the `ModelPart::Text` from.
+    /// * `content` - The content of the text model part.
     /// 
-    /// # Example
+    /// # Examples
     /// 
     /// ```
     /// use svggen::ModelPart;
     /// 
-    /// let text = ModelPart::from("Hello world!");
-    /// 
-    /// assert_eq!(text, ModelPart::Text(b"Hello world!".to_vec().into()));
+    /// let part = ModelPart::from("Hello World!".as_bytes());
+    /// assert_eq!(part, ModelPart::Text(b"Hello World!".to_vec().into()));
     /// ```
-    fn from(s: &str) -> Self {
-        ModelPart::Text(s.as_bytes().into())
+    fn from(content: T) -> Self {
+        ModelPart::Text(content.into())
     }
 }
 
-impl From<usize> for ModelPart {
-    /// Creates a `ModelPart::Argument` from an index.
-    /// 
-    /// # Arguments
-    /// 
-    /// * `index` - The index of the argument.
-    /// 
-    /// # Example
-    /// 
-    /// ```
-    /// use svggen::ModelPart;
-    /// 
-    /// let part = ModelPart::from(123);
-    /// 
-    /// assert_eq!(part, ModelPart::Argument(123));
-    /// ```
-    fn from(index: usize) -> Self {
-        ModelPart::Argument(index)
-    }
-}
+// ========================= //
+// ===== MODEL ARGUMENT ==== //
+// ========================= //
 
-/// An argument used to generate image with a model.
+/// A model argument used to pass arguments to a model to generate an image.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Argument<'a> {
     /// Some text.
@@ -228,65 +125,211 @@ pub enum Argument<'a> {
     Image(&'a Image),
 
     /// An empty argument.
-    None,
+    Empty,
 }
 
-impl From<&str> for Argument<'_> {
-    /// Creates an `Argument::Text` from a string.
+impl<T: Into<Box<[u8]>>> From<T> for Argument<'static> {
+    /// Creates a new text argument from the given content.
     /// 
     /// # Arguments
     /// 
-    /// * `text` - The text to create the `Argument::Text` from.
+    /// * `content` - The content of the text argument.
     /// 
-    /// # Example
+    /// # Examples
     /// 
     /// ```
     /// use svggen::Argument;
     /// 
-    /// let text = Argument::from("Hello world!");
-    /// 
-    /// assert_eq!(text, Argument::Text(b"Hello world!".to_vec().into()));
+    /// let arg = Argument::from("Hello World!".as_bytes());
+    /// assert_eq!(arg, Argument::Text(b"Hello World!".to_vec().into()));
     /// ```
-    fn from(s: &str) -> Self {
-        Argument::Text(s.as_bytes().into())
+    fn from(content: T) -> Self {
+        Argument::Text(content.into())
     }
 }
 
-/// An image model.
+// ========================= //
+// ========= MODEL ========= //
+// ========================= //
+
+/// A model used to generate images.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Model {
     /// The parts of the model.
-    parts: Vec<ModelPart>,
+    parts: Box<[ModelPart]>,
 }
 
-impl Loadable for Model {
-    /// Creates a model with a reader.
+impl Model {
+    /// Returns the parts of the model.
     /// 
-    /// Each line that matches `#GET n` will be the index argument `n`.
+    /// # Examples
+    /// 
+    /// ```
+    /// use svggen::{Model, ModelPart};
+    /// 
+    /// let model = Model::from(vec![
+    ///     ModelPart::from("Hello ".as_bytes()),
+    ///     ModelPart::Argument(0),
+    ///     ModelPart::from("!".as_bytes()),
+    /// ]);
+    /// 
+    /// assert_eq!(model.parts(), &[
+    ///     ModelPart::Text(b"Hello ".to_vec().into()),
+    ///     ModelPart::Argument(0),
+    ///     ModelPart::Text(b"!".to_vec().into()),
+    /// ]);
+    /// ```
+    pub fn parts(&self) -> &[ModelPart] {
+        &self.parts
+    }
+
+    /// Write the model to a writer.
     /// 
     /// # Arguments
     /// 
-    /// * `reader` - The reader to read from.
+    /// * `writer` - The writer to write the model to.
+    /// * `args` - The arguments to use.
     /// 
-    /// # Errors
-    /// 
-    /// This function will return an error if the reader cannot be read.
-    /// 
-    /// # Example
+    /// # Examples
     /// 
     /// ```
-    /// use svggen::{Model, ModelPart, Loadable};
+    /// use rutil::read::Readable;
+    /// use svggen::{Model, ModelPart, Image, Argument};
     /// 
-    /// // &[u8] implements Read so we can use it as a reader.
-    /// let model = Model::load(&mut &b"<svg>\n#GET 0\n</svg>"[..]).unwrap();
+    /// let model = Model::from(vec![
+    ///     ModelPart::from("Hello ".as_bytes()),
+    ///     ModelPart::Argument(0),
+    ///     ModelPart::from("!".as_bytes()),
+    /// ]);
+    /// 
+    /// let image = Image::from("World".as_bytes());
+    /// let args = [Argument::Image(&image)];
+    /// 
+    /// let mut buffer: Vec<u8> = Vec::new();
+    /// 
+    /// // buffer implements `io::Write` so we can use it as a writer
+    /// model.write(&mut buffer, &args).unwrap();
+    /// 
+    /// assert_eq!(buffer, b"Hello World!");
+    /// ```
+    pub fn write<W: io::Write>(&self, writer: &mut W, args: &[Argument]) -> io::Result<()> {
+        for part in self.parts.iter() {
+            match part {
+                ModelPart::Text(content) => writer.write_all(content)?,
+                ModelPart::Argument(index) => match args.get(*index) {
+                    Some(Argument::Text(content)) => writer.write_all(content)?,
+                    Some(Argument::Image(image)) => writer.write_all(image.content())?,
+                    Some(Argument::Empty) => (),
+                    None => return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("Missing argument: {}", index),
+                    )),
+                },
+            }
+        }
+        Ok(())
+    }
+
+    /// Creates an image from the model.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `args` - The arguments to use.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use rutil::read::Readable;
+    /// use svggen::{Model, ModelPart, Image, Argument};
+    /// 
+    /// let model = Model::from(vec![
+    ///     ModelPart::from("Hello ".as_bytes()),
+    ///     ModelPart::Argument(0),
+    ///     ModelPart::from("!".as_bytes()),
+    /// ]);
+    /// 
+    /// let image = Image::from("World".as_bytes());
+    /// let args = [Argument::Image(&image)];
+    /// 
+    /// let image = model.generate(&args).unwrap();
+    /// 
+    /// assert_eq!(image.content(), b"Hello World!");
+    /// ```
+    pub fn generate(&self, args: &[Argument]) -> Result<Image, usize> {
+        use std::io::Write;
+        let mut buffer = Vec::with_capacity(1024);
+        for part in self.parts.iter() {
+            match part {
+                ModelPart::Text(content) => buffer.write_all(content).unwrap(),
+                ModelPart::Argument(index) => match args.get(*index) {
+                    Some(Argument::Text(content)) => buffer.write_all(content).unwrap(),
+                    Some(Argument::Image(image)) => buffer.write_all(image.content()).unwrap(),
+                    Some(Argument::Empty) => (),
+                    None => return Err(*index),
+                },
+            }
+        }
+        Ok(Image { content: buffer.into() })
+    }
+}
+
+impl<T: Into<Box<[ModelPart]>>> From<T> for Model {
+    /// Creates a new model from the given parts.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `parts` - The parts of the model.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use svggen::{Model, ModelPart};
+    /// 
+    /// let model = Model::from(vec![
+    ///     ModelPart::from("Hello ".as_bytes()),
+    ///     ModelPart::Argument(0),
+    ///     ModelPart::from("!".as_bytes()),
+    /// ]);
     /// 
     /// assert_eq!(model.parts(), &[
-    ///     ModelPart::from("<svg>\n"),
-    ///     ModelPart::from(0),
-    ///     ModelPart::from("\n</svg>"),
+    ///     ModelPart::Text(b"Hello ".to_vec().into()),
+    ///     ModelPart::Argument(0),
+    ///     ModelPart::Text(b"!".to_vec().into()),
     /// ]);
     /// ```
-    fn load<R: Read>(reader: &mut R) -> io::Result<Self> {
+    fn from(parts: T) -> Self {
+        Model { parts: parts.into() }
+    }
+}
+
+impl Readable for Model {
+    /// There is no parsing error.
+    type ParseError = ();
+
+    /// Creates a new model from a reader.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `reader` - The reader to read the model from.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use rutil::read::Readable;
+    /// use svggen::{Model, ModelPart, Image, Argument};
+    /// 
+    /// let mut data = "<svg>\n#GET 0\n</svg>".as_bytes();
+    /// 
+    /// // data implements `io::Read` so we can use it as a reader
+    /// let model = Model::load(&mut data).unwrap();
+    /// 
+    /// assert_eq!(model.parts(), &[
+    ///     ModelPart::Text(b"<svg>\n".to_vec().into()),
+    ///     ModelPart::Argument(0),
+    ///     ModelPart::Text(b"\n</svg>".to_vec().into()),
+    /// ]);
+    /// ```
+    fn load<R: std::io::Read>(reader: &mut R) -> Result<Self, ReadError<Self::ParseError>> {
         let mut buffer: Vec<u8> = Vec::with_capacity(1024);
         let mut parts: Vec<ModelPart> = Vec::with_capacity(20);
         
@@ -295,15 +338,14 @@ impl Loadable for Model {
         let mut first_line = true;
         for line in lines {
             let line = line?;
-            let trim_line = line.trim();
 
             // If the line is an argument reference
-            if trim_line.starts_with("#GET ") {
-                if let Ok(index) = trim_line[5..].parse::<usize>() {
+            if line.starts_with("#GET ") {
+                if let Ok(index) = line[5..].parse::<usize>() {
                     // Add the text buffer to the parts (if it's not empty)
                     if buffer.len() > 0 {
                         buffer.push(b'\n');
-                        parts.push(ModelPart::Text(buffer.clone().into_boxed_slice()));
+                        parts.push(ModelPart::Text(buffer.clone().into()));
                         buffer.clear();
                     }
 
@@ -326,144 +368,10 @@ impl Loadable for Model {
 
         // Add the text buffer to the parts (if it's not empty)
         if buffer.len() > 0 {
-            parts.push(ModelPart::Text(buffer.clone().into_boxed_slice()));
+            parts.push(ModelPart::Text(buffer.into()));
         }
         
         // Return the model
-        Ok(Model { parts })
-    }
-}
-
-impl Model {
-    /// Create a model from the given parts.
-    /// 
-    /// # Arguments
-    /// 
-    /// * `parts` - The parts of the model.
-    /// 
-    /// # Example
-    /// 
-    /// ```
-    /// use svggen::{Model, ModelPart};
-    /// 
-    /// let model = Model::new(vec![
-    ///     ModelPart::from("Hello "),
-    ///     ModelPart::from(0),
-    ///     ModelPart::from("!")
-    /// ]);
-    /// ```
-    pub fn new(parts: Vec<ModelPart>) -> Self {
-        Self { parts }
-    }
-
-    /// Returns the parts of the model.
-    /// 
-    /// # Example
-    /// 
-    /// ```
-    /// use svggen::{Model, ModelPart};
-    /// 
-    /// let model = Model::new(vec![
-    ///     ModelPart::from("Hello "),
-    ///     ModelPart::from(0),
-    ///     ModelPart::from("!")
-    /// ]);
-    /// 
-    /// assert_eq!(model.parts().len(), 3);
-    /// ```
-    pub fn parts(&self) -> &[ModelPart] {
-        &self.parts
-    }
-
-    /// Write an image from the model with the given arguments.
-    /// 
-    /// # Arguments
-    /// 
-    /// * `writer` - The writer to write the image with.
-    /// * `arguments` - The arguments to use to generate the image.
-    /// 
-    /// # Errors
-    /// 
-    /// This function will return an error if the model needs an argument
-    /// that is not provided or if the writer fails to write the image.
-    /// 
-    /// # Example
-    /// 
-    /// ```
-    /// use svggen::{Model, ModelPart, Argument};
-    /// 
-    /// let model = Model::new(vec![
-    ///     ModelPart::from("Hello "),
-    ///     ModelPart::from(0),
-    ///     ModelPart::from("!")
-    /// ]);
-    /// let arguments = vec![Argument::from("World")];
-    /// let mut buffer = Vec::with_capacity(12);
-    /// model.write(&mut buffer, &arguments).unwrap();
-    /// 
-    /// assert_eq!(&buffer, b"Hello World!");
-    /// ```
-    pub fn write<W: Write>(&self, writer: &mut W, arguments: &[Argument]) -> io::Result<()> {
-        for part in &self.parts {
-            match part {
-                ModelPart::Text(text) => writer.write_all(text)?,
-                ModelPart::Argument(index) => match arguments.get(*index) {
-                    Some(argument) => match argument {
-                        Argument::Text(text) => writer.write_all(text)?,
-                        Argument::Image(image) => writer.write_all(image.content())?,
-                        Argument::None => (),
-                    },
-                    _ => return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!("Missing argument: {}", index),
-                    )),
-                },
-            }
-        }
-        Ok(())
-    }
-
-    /// Create an image from the model with the given arguments.
-    /// 
-    /// # Arguments
-    /// 
-    /// * `arguments` - The arguments to use to generate the image.
-    /// 
-    /// # Errors
-    /// 
-    /// This function will return an error if the model needs an argument that is not
-    /// provided. The error will contain the index of the argument that is missing.
-    /// 
-    /// # Example
-    /// 
-    /// ```
-    /// use svggen::{Model, ModelPart, Argument};
-    /// 
-    /// let model = Model::new(vec![
-    ///     ModelPart::from("Hello "),
-    ///     ModelPart::from(0),
-    ///     ModelPart::from("!")
-    /// ]);
-    /// let arguments = vec![Argument::from("World")];
-    /// let image = model.create(&arguments).unwrap();
-    /// 
-    /// assert_eq!(image.content(), b"Hello World!");
-    /// ```
-    pub fn create(&self, arguments: &[Argument]) -> Result<Image, usize> {
-        let mut buffer: Vec<u8> = Vec::with_capacity(1024);
-        for part in &self.parts {
-            match part {
-                ModelPart::Text(text) => buffer.write_all(text).unwrap(),
-                ModelPart::Argument(index) => match arguments.get(*index) {
-                    Some(argument) => match argument {
-                        Argument::Text(text) => buffer.write_all(text).unwrap(),
-                        Argument::Image(image) => buffer.write_all(image.content()).unwrap(),
-                        Argument::None => (),
-                    },
-                    _ => return Err(*index),
-                },
-            }
-        }
-        Ok(Image::new(buffer.into_boxed_slice()))
+        Ok(Model { parts: parts.into() })
     }
 }
